@@ -39,7 +39,13 @@ class TenancyServiceProvider extends ServiceProvider
                 })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
             ],
             Events\SavingTenant::class => [],
-            Events\TenantSaved::class => [],
+            Events\TenantSaved::class => [
+                // Clear tenant cache when saved
+                function (Events\TenantSaved $event) {
+                    cache()->forget("tenant:{$event->tenant->id}");
+                    cache()->forget("tenant_connection:{$event->tenant->id}");
+                }
+            ],
             Events\UpdatingTenant::class => [],
             Events\TenantUpdated::class => [],
             Events\DeletingTenant::class => [],
@@ -49,6 +55,12 @@ class TenancyServiceProvider extends ServiceProvider
                 ])->send(function (Events\TenantDeleted $event) {
                     return $event->tenant;
                 })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
+                
+                // Clear tenant cache when deleted
+                function (Events\TenantDeleted $event) {
+                    cache()->forget("tenant:{$event->tenant->id}");
+                    cache()->forget("tenant_connection:{$event->tenant->id}");
+                }
             ],
 
             // Domain events

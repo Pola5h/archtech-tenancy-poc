@@ -17,6 +17,18 @@ return [
     */
 
     'default' => env('DB_CONNECTION', 'sqlite'),
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Central Database Connection Name
+    |--------------------------------------------------------------------------
+    |
+    | This is the connection used for the central database that stores
+    | tenant information. This is separate from the tenant databases.
+    |
+    */
+    
+    'central' => env('DB_CONNECTION', 'sqlite'),
 
     /*
     |--------------------------------------------------------------------------

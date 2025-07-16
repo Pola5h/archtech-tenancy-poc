@@ -40,6 +40,9 @@ return [
      */
     'database' => [
         'central_connection' => env('DB_CONNECTION', 'central'),
+        
+        // Add tenant connection caching settings
+        'tenant_connection_cache_ttl' => 3600, // Cache tenant connections for 1 hour
 
         /**
          * Connection used as a "template" for the dynamically created tenant database connection.
@@ -89,6 +92,7 @@ return [
      */
     'cache' => [
         'tag_base' => 'tenant', // This tag_base, followed by the tenant_id, will form a tag that will be applied on each cache call.
+        'ttl' => 3600, // How long should we cache tenant data (in seconds)
     ],
 
     /**
@@ -165,9 +169,9 @@ return [
     'features' => [
         // Stancl\Tenancy\Features\UserImpersonation::class,
         // Stancl\Tenancy\Features\TelescopeTags::class,
-        // Stancl\Tenancy\Features\UniversalRoutes::class,
-        // Stancl\Tenancy\Features\TenantConfig::class, // https://tenancyforlaravel.com/docs/v3/features/tenant-config
-        // Stancl\Tenancy\Features\CrossDomainRedirect::class, // https://tenancyforlaravel.com/docs/v3/features/cross-domain-redirect
+        Stancl\Tenancy\Features\UniversalRoutes::class, // Enable universal routes for API
+        Stancl\Tenancy\Features\TenantConfig::class, // Enable tenant-specific config
+        Stancl\Tenancy\Features\CrossDomainRedirect::class, // Allow redirects between central and tenant domains
         // Stancl\Tenancy\Features\ViteBundler::class,
     ],
 

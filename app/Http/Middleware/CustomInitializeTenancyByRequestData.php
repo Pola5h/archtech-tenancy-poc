@@ -5,9 +5,32 @@ namespace App\Http\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Stancl\Tenancy\Middleware\InitializeTenancyByRequestData;
+use Closure;
+use Stancl\Tenancy\Exceptions\TenantCouldNotBeIdentifiedByRequestDataException;
 
 class CustomInitializeTenancyByRequestData extends InitializeTenancyByRequestData
 {
+    /**
+     * Handle the incoming request and catch tenant identification exceptions.
+     *
+     * @param Request $request
+     * @param Closure $next
+     * @return mixed
+     */
+    public function handle($request, Closure $next)
+    {
+        try {
+            return parent::handle($request, $next);
+        } catch (TenantCouldNotBeIdentifiedByRequestDataException $e) {
+            // Return a JSON error response
+            return response()->json([
+                'error' => 'tenant_not_found',
+                'message' => 'Tenant could not be identified',
+                'attempted_tenant' => $this->getPayload($request) ?? 'none'
+            ], 404);
+        }
+    }
+
     /**
      * Override the getPayload method to only accept X-Tenant-ID header and query parameter
      *
@@ -34,7 +57,7 @@ class CustomInitializeTenancyByRequestData extends InitializeTenancyByRequestDat
         if ($tenant) {
             Log::info("Tenant identified from $source: $tenant");
         } else {
-            Log::warning("No tenant found in request", [
+            Log::debug("No tenant found in request", [
                 'headers' => $request->headers->all(),
                 'query' => $request->query->all()
             ]);

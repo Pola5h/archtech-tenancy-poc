@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Middleware\CustomInitializeTenancyByRequestData;
+use Stancl\Tenancy\Features\UniversalRoutes;
 
 // Non-tenant routes (available without tenant identification)
 Route::prefix('v1')->group(function () {
@@ -24,7 +25,8 @@ Route::prefix('v1')->group(function () {
     });
 });
 
-// Tenant-aware API routes (require tenant identification)
+// Tenant-aware API routes using the CustomInitializeTenancyByRequestData middleware
+// with X-Tenant-ID header or tenant query parameter
 Route::middleware([
     CustomInitializeTenancyByRequestData::class,
     'api',
@@ -38,5 +40,6 @@ Route::middleware([
             'message' => 'Successfully identified tenant',
         ];
     });
+    
     // ...add more tenant-aware API routes here...
 });

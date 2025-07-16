@@ -1,61 +1,159 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Multi-Tenancy Implementation with stancl/tenancy
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This repository demonstrates a multi-tenant application built with Laravel using the `stancl/tenancy` package. The implementation addresses specific requirements for a robust, scalable, and flexible multi-tenant system.
 
-## About Laravel
+## Key Features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+### 1. Request-Based Tenant Identification via X-TENANT-ID
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Implemented custom middleware `CustomInitializeTenancyByRequestData` that identifies tenants using:
+  - `X-TENANT-ID` HTTP header (primary method)
+  - `?tenant=` query parameter (fallback method)
+- Gracefully handles invalid tenant identifiers with proper error responses instead of exceptions
+- Automatically logs tenant identification attempts for debugging and audit purposes
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```php
+// Example API request with X-TENANT-ID header
+curl -X GET \
+  https://yourdomain.com/api/v1/resources \
+  -H 'X-TENANT-ID: tenant1'
+```
 
-## Learning Laravel
+### 2. Tenant Model Storage
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- `App\Tenant` model extends `Stancl\Tenancy\Database\Models\Tenant` and implements `TenantWithDatabase`
+- Tenant identifiers and database connection details are stored in the central database
+- Uses the `data` attribute (JSON column) to store tenant-specific configuration
+- Proper type casting and serialization are handled automatically
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+```php
+// Example of accessing tenant data
+$tenant = \App\Tenant::find('tenant1');
+$databaseName = $tenant->database()->getName();
+$tenantData = $tenant->data; // Array of tenant-specific config
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### 3. Persistent Central Database Connection & Caching
 
-## Laravel Sponsors
+- Maintains a persistent connection to the central database via `AppServiceProvider`
+- Implements connection caching to reduce database queries:
+  - Configured with `tenant_connection_cache_ttl` (default: 3600 seconds)
+  - Automatically invalidates cache when tenants are updated or deleted
+- Efficient connection management to minimize overhead during tenant switching
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```php
+// Configuration in tenancy.php
+'database' => [
+    'central_connection' => env('DB_CONNECTION', 'central'),
+    'tenant_connection_cache_ttl' => 3600, // Cache tenant connections for 1 hour
+    // ...
+],
+```
 
-### Premium Partners
+### 4. Model-Specific Database Connections
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+- Models can explicitly define their database connection
+- Central data models use the `central` connection
+- Tenant models automatically use the tenant-specific connection
+- Flexible configuration for mixed-mode applications
 
-## Contributing
+```php
+// Example of a model using central connection
+class Tenant extends BaseTenant implements TenantWithDatabase
+{
+    protected $connection = 'central';
+    // ...
+}
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+// Example of a tenant-specific model (uses tenant connection automatically)
+class User extends Authenticatable
+{
+    // No connection specified - uses tenant connection within tenant context
+    // ...
+}
+```
 
-## Code of Conduct
+### 5. Unified API Routes
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- Universal routes are enabled via the `UniversalRoutes` feature
+- All tenant-aware API routes are defined in standard `routes/api.php` file
+- Routes can be conditionally applied based on tenant context
+- No duplication of route definitions necessary
 
-## Security Vulnerabilities
+```php
+// Example of tenant-aware routes in api.php
+Route::middleware([
+    CustomInitializeTenancyByRequestData::class,
+    'api',
+])
+->prefix('v1')
+->group(function () {
+    Route::get('/tenant-info', function () {
+        return [
+            'tenant_id' => tenant('id'),
+            'db' => tenant('database'),
+        ];
+    });
+});
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 6. Tenant-Aware Job Dispatching
 
-## License
+- Jobs maintain tenant context when dispatched
+- The `QueueTenancyBootstrapper` ensures jobs run in the correct tenant context
+- Works with various queue drivers (database, Redis, etc.)
+- Tenant ID is automatically attached to jobs to ensure they execute in the correct context
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Getting Started
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
+   ```
+   composer install
+   ```
+3. Set up your environment variables in `.env`
+4. Run migrations:
+   ```
+   php artisan migrate
+   ```
+5. Seed initial tenants (optional):
+   ```
+   php artisan db:seed --class=TenantSeeder
+   ```
+
+### Creating a Tenant
+
+```php
+$tenant = \App\Tenant::create([
+    'id' => 'tenant1', // Will be used in X-TENANT-ID header
+    'data' => [
+        'name' => 'Tenant Organization Name',
+        // Add any other tenant-specific data
+    ],
+]);
+
+// This will automatically create the tenant database
+// and run migrations for the tenant
+```
+
+### Using the API
+
+Make requests with the `X-TENANT-ID` header:
+
+```bash
+curl -X GET \
+  https://yourdomain.com/api/v1/resources \
+  -H 'X-TENANT-ID: tenant1'
+```
+
+## Configuration
+
+The primary configuration file is `config/tenancy.php`, which defines:
+
+- Database connections
+- Caching strategies
+- File storage settings
+- Queue configuration
+- Feature flags
